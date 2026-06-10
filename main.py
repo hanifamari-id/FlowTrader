@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 from data.storage import init_db, get_reflections, get_current_balance
 from engine.engine import FlowTraderEngine
+from notifier.telegram import send_analysis
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,10 +34,12 @@ async def run_analysis(engine: FlowTraderEngine):
     log.info(f"=== RUNNING ANALYSIS {datetime.now().strftime('%H:%M:%S')} ===")
     try:
         results = await engine.run_all()
-        active = sum(1 for v in results.values() if v is not None)
+        active = sum(1 for v in results.values() if v is not None and v.get("signal") is not None)
         log.info(f"Analysis complete — {active} signals triggered")
+        send_analysis(results, system_message=f"{active} signal(s) triggered this run.")
     except Exception as e:
         log.error(f"Analysis failed: {e}")
+        send_analysis({}, system_message=f"Analysis failed: {e}")
 
 
 async def cmd_reflect(pair: str = None):

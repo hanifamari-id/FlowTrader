@@ -22,7 +22,10 @@ from engine.big_trade import filter_big_trades, big_trade_at_level_confluence
 from engine.scoring import aggregate_signals
 from execution.paper_trader import PaperTrader
 from execution.trade_reflector import TradeReflector, ExitReason
-from notifier.telegram import send_signal, send_trade_open, send_trade_close, send_reflection, send_status
+from notifier.telegram import (
+    send_analysis, send_signal, send_trade_open, send_tp1_hit,
+    send_tp2_hit, send_tp3_hit, send_sl_hit, send_reflection, send_status,
+)
 
 log = logging.getLogger("flowtrader.engine")
 
@@ -67,9 +70,17 @@ class FlowTraderEngine:
         log.info(f"{pair} — H4:{h4_bias.direction.value} H1:{h1_bias.direction.value} M15:{m15_bias.direction.value}")
 
         master_bias = h4_bias.direction
+        base_result = {
+            "signal": None,
+            "trade": None,
+            "bias_h4": h4_bias.direction,
+            "bias_h1": h1_bias.direction,
+            "bias_m15": m15_bias.direction,
+        }
+
         if master_bias.value == "NEUTRAL":
             log.info(f"{pair}: Neutral bias, skipping")
-            return None
+            return {**base_result, "status": "neutral"}
 
         key_levels = identify_key_levels([h4_profile, h1_profile], lookback_days=2)
         entry_zones = find_best_entry_zones(
@@ -78,7 +89,7 @@ class FlowTraderEngine:
 
         if not entry_zones:
             log.info(f"{pair}: No entry zones within range")
-            return None
+            return {**base_result, "status": "no_zone"}
 
         best_zone = entry_zones[0]
 
@@ -86,12 +97,12 @@ class FlowTraderEngine:
         trades = self.fetcher.get_recent_agg_trades(pair, minutes_back=60)
         if len(trades) < 20:
             log.warning(f"{pair}: Not enough trades ({len(trades)})")
-            return None
+            return {**base_result, "status": "no_trades"}
 
         footprints = build_footprint_candles_from_trades(trades, timeframe_minutes=15, tick_size=0.5)
         if len(footprints) < 3:
             log.warning(f"{pair}: Not enough footprint candles ({len(footprints)})")
-            return None
+            return {**base_result, "status": "no_footprint"}
 
         pattern_result = detect_best_pattern(
             footprints[-5:],
@@ -123,7 +134,7 @@ class FlowTraderEngine:
             last = self.last_signal_time.get(pair)
             if last and (datetime.now() - last).total_seconds() < 1800:
                 log.info(f"{pair}: Rate limited")
-                return None
+                return {**base_result, "status": "rate_limited"}
 
             self.last_signal_time[pair] = datetime.now()
 
@@ -137,13 +148,19 @@ class FlowTraderEngine:
             }
 
             trade = self.paper_trader.open_trade(signal)
-            send_signal(signal)
-            send_trade_open(trade)
+            send_signal(signal, h4_bias.direction, h1_bias.direction, m15_bias.direction)
+            send_trade_open(trade, h4_bias.direction, h1_bias.direction, m15_bias.direction)
 
             log.info(f"{pair}: SIGNAL TRIGGERED — {signal.direction.value} @ {signal.entry_price:.2f}")
-            return {"signal": signal, "trade": trade}
+            return {
+                "signal": signal,
+                "trade": trade,
+                "bias_h4": h4_bias.direction,
+                "bias_h1": h1_bias.direction,
+                "bias_m15": m15_bias.direction,
+            }
 
-        return None
+        return {**base_result, "status": "no_signal"}
 
     def check_open_trades(self, current_prices: dict[str, float]):
         """Check all open trades against current prices. Generate reflection on close."""
@@ -177,6 +194,17 @@ class FlowTraderEngine:
                         duration_minutes=duration,
                     )
                     reflection_text = self.reflector.format_reflection(reflection)
+
+                    # Route to correct notification
+                    if closed.status == "CLOSED_SL":
+                        send_sl_hit(closed, reflection_text)
+                    elif closed.status == "CLOSED_TP3":
+                        send_tp3_hit(closed)
+                    elif closed.status == "CLOSED_TP2":
+                        send_tp2_hit(closed)
+                    else:
+                        send_sl_hit(closed, reflection_text)
+
                     send_reflection(reflection_text)
                     asyncio.create_task(save_reflection(reflection))
                     log.info(f"{closed.pair}: Trade closed — {exit_reason.value}, P&L: {closed.current_pnl:.2f}")

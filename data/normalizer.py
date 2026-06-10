@@ -226,13 +226,14 @@ class TradingSignal:
     stop_loss: float
     tp1: float
     tp2: float
-    rr_ratio: float
-    total_score: float
-    score_breakdown: dict
-    primary_pattern: str
-    confidence: float
-    timestamp: datetime
-    key_level_type: str
+    tp3: float = 0.0
+    rr_ratio: float = 0.0
+    total_score: float = 0.0
+    score_breakdown: dict = field(default_factory=dict)
+    primary_pattern: str = ""
+    confidence: float = 0.0
+    timestamp: datetime = field(default_factory=datetime.now)
+    key_level_type: str = ""
     trade_decision: TradeDecision = TradeDecision.NO_TRADE
 
 
@@ -246,9 +247,11 @@ class OpenTrade:
     stop_loss: float
     tp1: float
     tp2: float
-    position_size: float
-    open_time: datetime
+    tp3: float = 0.0
+    position_size: float = 0.0
+    open_time: datetime = field(default_factory=datetime.now)
     current_pnl: float = 0.0
     status: str = "OPEN"
     tp1_hit: bool = False
+    tp2_hit: bool = False
     trailing_sl: float = 0.0

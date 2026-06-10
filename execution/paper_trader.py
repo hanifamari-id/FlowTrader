@@ -39,11 +39,13 @@ class PaperTrader:
             stop_loss=signal.stop_loss,
             tp1=signal.tp1,
             tp2=signal.tp2,
+            tp3=signal.tp3,
             position_size=position_size,
             open_time=datetime.now(),
             current_pnl=0.0,
             status="OPEN",
             tp1_hit=False,
+            tp2_hit=False,
         )
 
         self.open_trades.append(trade)
@@ -77,10 +79,21 @@ class PaperTrader:
             # TP2 hit
             elif trade.direction == Direction.LONG and current_price >= trade.tp2:
                 trade.status = "CLOSED_TP2"
+                trade.tp2_hit = True
                 trade.current_pnl = self._calc_pnl(trade, current_price)
                 closed.append(trade)
             elif trade.direction == Direction.SHORT and current_price <= trade.tp2:
                 trade.status = "CLOSED_TP2"
+                trade.tp2_hit = True
+                trade.current_pnl = self._calc_pnl(trade, current_price)
+                closed.append(trade)
+            # TP3 hit (final target)
+            elif trade.direction == Direction.LONG and current_price >= trade.tp3 and trade.tp3 > 0:
+                trade.status = "CLOSED_TP3"
+                trade.current_pnl = self._calc_pnl(trade, current_price)
+                closed.append(trade)
+            elif trade.direction == Direction.SHORT and current_price <= trade.tp3 and trade.tp3 > 0:
+                trade.status = "CLOSED_TP3"
                 trade.current_pnl = self._calc_pnl(trade, current_price)
                 closed.append(trade)
             else:

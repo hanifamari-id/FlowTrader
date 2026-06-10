@@ -49,16 +49,15 @@ def calculate_trade_levels(
     buffer = tick_size * 2  # 2-tick buffer for SL
 
     if direction == Direction.LONG:
-        # SL below VAL or nearest LVN below entry
         sl = entry_price - buffer * 3
-        # TP1 at VAH
         tp1 = profile_vah
-        # TP2 at next major level above VAH
         tp2 = tp1 + (profile_vah - profile_val) * 0.5
+        tp3 = profile_vah + (profile_vah - profile_val) * 0.8
     else:
         sl = entry_price + buffer * 3
         tp1 = profile_val
         tp2 = tp1 - (profile_vah - profile_val) * 0.5
+        tp3 = profile_val - (profile_vah - profile_val) * 0.8
 
     risk = abs(entry_price - sl)
     rr_tp1 = abs(tp1 - entry_price) / risk if risk > 0 else 0
@@ -68,6 +67,7 @@ def calculate_trade_levels(
         "stop_loss": sl,
         "tp1": tp1,
         "tp2": tp2,
+        "tp3": tp3,
         "risk": risk,
         "rr_tp1": rr_tp1,
     }
@@ -151,6 +151,7 @@ def aggregate_signals(
         stop_loss=levels["stop_loss"],
         tp1=levels["tp1"],
         tp2=levels["tp2"],
+        tp3=levels["tp3"],
         rr_ratio=levels["rr_tp1"],
         total_score=total_score,
         score_breakdown=breakdown,
